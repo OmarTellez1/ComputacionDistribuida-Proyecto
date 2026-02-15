@@ -9,11 +9,11 @@ dotenv.config();
 const app = express();
 
 // --- Middlewares Globales ---
-app.use(express.json()); // Entender JSON en el body
-app.use(morgan('dev'));  // Logs de peticiones en consola
+app.use(express.json()); 
+app.use(morgan('dev'));  
 
 // --- Rutas ---
-// Prefijo /orders para todas las rutas de este servicio
+
 app.use('/', orderRoutes);
 
 // --- Manejo de errores 404 (Ruta no encontrada) ---

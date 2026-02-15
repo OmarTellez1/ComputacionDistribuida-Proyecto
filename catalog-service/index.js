@@ -1,4 +1,3 @@
-// index.js (Raíz del microservicio)
 import express from 'express';
 import dotenv from 'dotenv';
 import morgan from 'morgan';
@@ -11,8 +10,8 @@ connectDB();
 
 const app = express();
 
-// Middlewares
-app.use(express.json()); // Permite recibir JSON en el body
+
+app.use(express.json()); 
 
 app.use(morgan('dev'));
 

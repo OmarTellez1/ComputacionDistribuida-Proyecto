@@ -10,17 +10,14 @@ const app = express();
 
 app.use(morgan('dev'));
 
-// --- CONFIGURACIÓN CORS CORRECTA ---
+
 // Solo el Gateway define quién entra.
 app.use(cors({
-  origin: 'http://localhost:5173', // Tu Frontend
+  origin: 'http://localhost:5173', // Frontend
   credentials: true,               // Permitir cookies/tokens
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-// --- PROXIES ---
-// Ya no necesitamos 'onProxyRes' porque el Auth Service ya no enviará cabeceras conflictivas.
 
 // 1. Proxy para Auth
 app.use('/auth', createProxyMiddleware({
