@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Dominio: Orden
+model Order {
+  id          String   @id @default(uuid()) // ID generado automáticamente
+  userId      String   // ID del usuario (viene del Token)
+  items       Json     // Guardamos los productos como un Array JSON
+  totalAmount Decimal  @db.Decimal(10, 2)
+  status      String   @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
