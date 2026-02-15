@@ -11,7 +11,7 @@ export const create = async (req, res) => {
       return res.status(401).json({ message: 'Usuario no identificado en el token' });
     }
 
-    // 2. Llamar al SERVICIO (Aquí está la magia)
+    // 2. Llamar al SERVICIO 
     // Le pasamos el userId y los items. El servicio se encarga de validar stock y calcular precios.
     const newOrder = await orderService.createOrder(userId, items);
 

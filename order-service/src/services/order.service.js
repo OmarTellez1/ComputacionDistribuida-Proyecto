@@ -1,36 +1,49 @@
 import prisma from '../config/db.js';
 import axios from 'axios';
+import CircuitBreaker from 'opossum';
+
+// Función que realiza la validación batch contra el catálogo
+const validateStock = async (items) => {
+  const payload = { items: items.map(i => ({ productId: i.productId, quantity: i.quantity })) };
+  const url = `${process.env.CATALOG_SERVICE_URL}/validate`;
+  const response = await axios.post(url, payload);
+  return response.data;
+};
+
+// Instancia del Circuit Breaker envolviendo la función de validación
+const stockBreaker = new CircuitBreaker(validateStock, {
+  timeout: 3000,                // 3 segundos máximo por petición
+  errorThresholdPercentage: 50, // Si falla el 50%, abre el circuito
+  resetTimeout: 10000,          // Espera 10s antes de probar de nuevo (half-open)
+});
 
 export const createOrder = async (userId, items) => {
   let totalAmount = 0;
 
-  // 1. Validar Stock y Precios comunicándose con el servicio de Catálogo
-  // Iteramos sobre cada item que el usuario quiere comprar
-  for (const item of items) {
-    try {
-      // LLAMADA SINCRÓNICA: GET http://localhost:3002/products/{id}
-      const url = `${process.env.CATALOG_SERVICE_URL}/${item.productId}`;
-      const response = await axios.get(url);
-      const product = response.data;
+  // 1. Validar Stock y Precios con Circuit Breaker
+  try {
+    const result = await stockBreaker.fire(items);
 
-      // Validar si hay suficiente stock
-      if (product.stock < item.quantity) {
-        throw new Error(`Stock insuficiente para el producto: ${product.name}`);
-      }
+    // El catálogo devuelve { valid, totalPrice, processedItems }
+    totalAmount = result.totalPrice;
 
-      // Sumar al total (Usamos el precio REAL que viene del catálogo, no del frontend)
-      totalAmount += product.price * item.quantity;
-
-    } catch (error) {
-      // Manejo de errores de comunicación (Circuit Breaker simplificado)
-      if (error.response && error.response.status === 404) {
-        throw new Error(`El producto ${item.productId} no existe en el catálogo`);
-      }
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error('El servicio de Catálogo no está disponible. Intente más tarde.');
-      }
-      throw error; // Re-lanzar otros errores (como stock insuficiente)
+  } catch (error) {
+    // Caso A: El circuito está ABIERTO (Opossum bloqueó la petición)
+    if (error.message && error.message.includes('Breaker is open')) {
+      throw new Error('⛔ Corte de seguridad activo (Circuit Open). El sistema no acepta peticiones temporalmente.');
     }
+
+    // Caso B: Timeout o error de red (circuito cerrado pero la petición falló)
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ETIME') {
+      throw new Error('⚠️ El servicio de Catálogo no responde (Timeout).');
+    }
+
+    // Error controlado del catálogo (409 Conflict / 500)
+    if (error.response) {
+      throw new Error(error.response.data.message || 'Error al validar stock en el catálogo');
+    }
+
+    throw error;
   }
 
   // 2. Crear la Orden en PostgreSQL usando Prisma
