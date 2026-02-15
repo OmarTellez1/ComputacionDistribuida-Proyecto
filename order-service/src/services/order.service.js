@@ -4,33 +4,27 @@ import axios from 'axios';
 export const createOrder = async (userId, items) => {
   let totalAmount = 0;
 
-  // 1. Validar Stock y Precios comunicándose con el servicio de Catálogo
-  // Iteramos sobre cada item que el usuario quiere comprar
-  for (const item of items) {
-    try {
-      // LLAMADA SINCRÓNICA: GET http://localhost:3002/products/{id}
-      const url = `${process.env.CATALOG_SERVICE_URL}/${item.productId}`;
-      const response = await axios.get(url);
-      const product = response.data;
+  // 1. Validar Stock y Precios con una única llamada al servicio de Catálogo
+  try {
+    const payload = { items: items.map(i => ({ productId: i.productId, quantity: i.quantity })) };
+    const url = `${process.env.CATALOG_SERVICE_URL}/validate`;
+    const response = await axios.post(url, payload);
 
-      // Validar si hay suficiente stock
-      if (product.stock < item.quantity) {
-        throw new Error(`Stock insuficiente para el producto: ${product.name}`);
-      }
+    // El catálogo devuelve { valid, totalPrice, processedItems }
+    totalAmount = response.data.totalPrice;
 
-      // Sumar al total (Usamos el precio REAL que viene del catálogo, no del frontend)
-      totalAmount += product.price * item.quantity;
-
-    } catch (error) {
-      // Manejo de errores de comunicación (Circuit Breaker simplificado)
-      if (error.response && error.response.status === 404) {
-        throw new Error(`El producto ${item.productId} no existe en el catálogo`);
-      }
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error('El servicio de Catálogo no está disponible. Intente más tarde.');
-      }
-      throw error; // Re-lanzar otros errores (como stock insuficiente)
+  } catch (error) {
+    // Circuit Breaker: error de red / conexión rechazada / timeout
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      throw new Error('El servicio de Catálogo no está disponible. Intente más tarde.');
     }
+
+    // Error controlado del catálogo (409 Conflict / 500)
+    if (error.response) {
+      throw new Error(error.response.data.message || 'Error al validar stock en el catálogo');
+    }
+
+    throw error;
   }
 
   // 2. Crear la Orden en PostgreSQL usando Prisma
